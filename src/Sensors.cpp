@@ -1,5 +1,7 @@
 #include "Sensors.hpp"
 
+#define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
+
 // Units and sensors registers
 
 #define X(unit, symbol, name) symbol,
@@ -21,6 +23,16 @@ int sensors_device_types[] = {SENSORS_TYPES};
 #undef X
 
 uint8_t sensors_registered[SCOUNT];
+
+TwoWire * wires[] = 
+{ 
+#if defined(M5STICKCPLUS) || defined(M5COREINK) || defined(ESP32C3)
+  &Wire,
+#endif
+#if defined(M5STICKCPLUS) || defined(M5COREINK) || defined(M5ATOM)
+  &Wire1 
+#endif
+};
 
 /***********************************************************************************
  *  P U B L I C   M E T H O D S
@@ -1489,56 +1501,62 @@ void Sensors::sps30DeviceInfo() {
 
 void Sensors::am2320Init() {
   sensorAnnounce(SENSORS::SAM232X);
-#ifndef Wife1
-  if (!am2320.begin()) return;
-#else
-  am2320 = AM232X(&Wire);
-  if (!am2320.begin()) {
-    am2320 = AM232X(&Wire1);
-    if (!am2320.begin()) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    am2320 = AM232X(wires[i]);
+    success = am2320.begin();
+    if(success) break;
   }
-#endif
+  if (!success) return;
+
   am2320.wakeUp();
   sensorRegister(SENSORS::SAM232X);
 }
 
 void Sensors::sht31Init() {
   sensorAnnounce(SENSORS::SSHT31);
-  sht31 = Adafruit_SHT31();
-#ifndef Wire1
-  if (!sht31.begin()) return;
-#else
-  if (!sht31.begin()) {
-    sht31 = Adafruit_SHT31(&Wire1);
-    if (!sht31.begin()) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    sht31 = Adafruit_SHT31(wires[i]);
+    success = sht31.begin();
+    if(success) break;
   }
-#endif
+  if (!success) return;
+
   sensorRegister(SENSORS::SSHT31);
 }
 
 void Sensors::bme280Init() {
   sensorAnnounce(SENSORS::SBME280);
-#ifndef Wire1
-  if (!bme280.begin() && !bme280.begin(BME280_ADDRESS_ALTERNATE)) return;
-#else
-  if (!bme280.begin() && !bme280.begin(BME280_ADDRESS_ALTERNATE) &&
-      !bme280.begin(BME280_ADDRESS, &Wire1) && !bme280.begin(BME280_ADDRESS_ALTERNATE, &Wire1))
-    return;
-#endif
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    success = bme280.begin(BME280_ADDRESS, wires[i]);
+    if(success) break;
+    success = bme280.begin(BME280_ADDRESS_ALTERNATE, wires[i]);
+    if(success) break;
+  }
+  if (!success) return;
+
   sensorRegister(SENSORS::SBME280);
 }
 
 /// Environment BMP280 sensor init
 void Sensors::bmp280Init() {
   sensorAnnounce(SENSORS::SBMP280);
-#ifndef Wire1
-  if (!bmp280.begin() && !bmp280.begin(BMP280_ADDRESS_ALT)) return;
-#else
-  if (!bmp280.begin() && !bmp280.begin(BMP280_ADDRESS_ALT)) {
-    bmp280 = Adafruit_BMP280(&Wire1);
-    if (!bmp280.begin() && !bmp280.begin(BMP280_ADDRESS_ALT)) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    bmp280 = Adafruit_BMP280(wires[i]);
+    success = bmp280.begin(BMP280_ADDRESS);
+    if(success) break;
+    success = bmp280.begin(BMP280_ADDRESS_ALT);
+    if(success) break;
   }
-#endif
+  if (!success) return;
+
   bmp280.setSampling(Adafruit_BMP280::MODE_NORMAL,      // Operating Mode.
                      Adafruit_BMP280::SAMPLING_X2,      // Temp. oversampling
                      Adafruit_BMP280::SAMPLING_X16,     // Pressure oversampling
@@ -1556,7 +1574,15 @@ void Sensors::bmp280Init() {
 /// Bosch BME680 sensor init
 void Sensors::bme680Init() {
   sensorAnnounce(SENSORS::SBME680);
-  if (!bme680.begin()) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    bme680 = Adafruit_BME680(wires[i]);
+    success = bme680.begin();
+    if(success) break;
+  }
+  if (!success) return;
+
   bme680.setTemperatureOversampling(BME680_OS_8X);
   bme680.setHumidityOversampling(BME680_OS_2X);
   bme680.setPressureOversampling(BME680_OS_4X);
@@ -1580,11 +1606,14 @@ void Sensors::aht10Init() {
 /// Sensirion SCD30 CO2/T/H sensor init
 void Sensors::CO2scd30Init() {
   sensorAnnounce(SENSORS::SSCD30);
-#ifndef Wire1
-  if (!scd30.begin()) return;
-#else
-  if (!scd30.begin() && !scd30.begin(SCD30_I2CADDR_DEFAULT, &Wire1, SCD30_CHIP_ID)) return;
-#endif
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    success = scd30.begin(SCD30_I2CADDR_DEFAULT, wires[i], SCD30_CHIP_ID);
+    if(success) break;
+  }
+  if (!success) return;
+
   delay(10);
 
   DEBUG("-->[SLIB] SCD30 Temp offset\t:", String(scd30.getTemperatureOffset()).c_str());
@@ -1624,10 +1653,15 @@ void Sensors::CO2scd4xInit() {
   sensorAnnounce(SENSORS::SSCD4X);
   float tTemperatureOffset, offsetDifference;
   uint16_t tSensorAltitude;
-  uint16_t error;
-  scd4x.begin(Wire);
-  error = scd4x.stopPeriodicMeasurement();
-  if (error) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    scd4x.begin(*wires[i]);
+    success = (scd4x.stopPeriodicMeasurement() == 0);
+    if(success) break;
+  }
+  if (!success) return;
+
   scd4x.getTemperatureOffset(tTemperatureOffset);
   scd4x.getSensorAltitude(tSensorAltitude);
   DEBUG("-->[SLIB] SCD4x Temp offset\t:", String(tTemperatureOffset).c_str());
@@ -1641,7 +1675,7 @@ void Sensors::CO2scd4xInit() {
     Serial.println("-->[SLIB] SCD4x new offset\t: Temp offset to" + String(toffset));
     setSCD4xTempOffset(toffset);
   }
-  error = scd4x.startPeriodicMeasurement();
+  uint16_t error = scd4x.startPeriodicMeasurement();
   if (error) DEBUG("[W][SLIB] SCD4x periodic measure\t: starting error:", String(error).c_str());
   sensorRegister(SENSORS::SSCD4X);
 }
@@ -1671,14 +1705,15 @@ void Sensors::setSCD4xAltitudeOffset(float offset) {
 /// Panasonic SEN5X sensor init
 void Sensors::sen5xInit() {
   sensorAnnounce(SENSORS::SSEN5X);
-#ifndef Wire1
-  sen5x.begin(Wire);
-#else
-  sen5x.begin(Wire1);
-#endif
-  uint16_t error;
-  error = sen5x.deviceReset();
-  if (error) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    sen5x.begin(*wires[i]);
+    success = (sen5x.deviceReset() == 0);
+    if(success) break;
+  }
+  if (!success) return;
+
   float tempOffset = 0.0;
   DEBUG("-->[SLIB] SEN5X Temp offset\t:",
         String(sen5x.getTemperatureOffsetSimple(tempOffset)).c_str());
@@ -1703,20 +1738,29 @@ void Sensors::setsen5xTempOffset(float offset) {
 /// Panasonic GCJA5 sensor init
 void Sensors::GCJA5Init() {
   sensorAnnounce(SENSORS::SGCJA5);
-#ifndef Wire1
-  if (!pmGCJA5.begin()) return;
-#else
-  if (!pmGCJA5.begin() && !pmGCJA5.begin(Wire1)) return;
-#endif
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    success = pmGCJA5.begin(*wires[i]);
+    if(success) break;
+  }
+  if (!success) return;
+
   sensorRegister(SENSORS::SGCJA5);
 }
 
 /// DFRobot GAS (CO) sensors init
 void Sensors::DFRobotCOInit() {
   sensorAnnounce(SENSORS::SDFRCO);
-  dfrCO =
-      DFRobot_GAS_I2C(&Wire, 0x78);  // Be sure that your group of i2c address is 7, and A0=0 A1=0
-  if (!dfrCO.begin()) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+      dfrCO = DFRobot_GAS_I2C(wires[i], 0x78);  // Be sure that your group of i2c address is 7, and A0=0 A1=0
+    success = dfrCO.begin();
+    if(success) break;
+  }
+  if (!success) return;
+
   // Mode of obtaining data: the main controller needs to request the sensor for data
   dfrCO.changeAcquireMode(dfrCO.PASSIVITY);
   // Turn on temperature compensation: gas.ON : turn on
@@ -1727,9 +1771,16 @@ void Sensors::DFRobotCOInit() {
 /// DFRobot GAS (NH3) sensors init
 void Sensors::DFRobotNH3Init() {
   sensorAnnounce(SENSORS::SDFRNH3);
-  dfrNH3 = DFRobot_GAS_I2C(&Wire, 0x7A);  // 0x77 y 0x75 used by bme680. Be sure that your group of
-                                          // i2c address is 7, and A0=1 A1=0
-  if (!dfrNH3.begin()) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    dfrNH3 = DFRobot_GAS_I2C(wires[i], 0x7A);  // 0x77 y 0x75 used by bme680. Be sure that your group of
+                                               // i2c address is 7, and A0=1 A1=0
+    success = dfrNH3.begin();
+    if(success) break;
+  }
+  if (!success) return;
+
   // Mode of obtaining data: the main controller needs to request the sensor for data
   dfrNH3.changeAcquireMode(dfrNH3.PASSIVITY);
   // Turn on temperature compensation: gas.ON : turn on
@@ -1740,9 +1791,15 @@ void Sensors::DFRobotNH3Init() {
 /// DFRobot GAS (NO2) sensors init
 void Sensors::DFRobotNO2Init() {
   sensorAnnounce(SENSORS::SDFRNO2);
-  dfrNO2 =
-      DFRobot_GAS_I2C(&Wire, 0x7B);  // Be sure that your group of i2c address is 7, and A0=1 A1=1
-  if (!dfrNO2.begin()) return;
+  bool success = false;
+  for(int i = 0; i < ARRAY_LEN(wires); i++)
+  {
+    dfrNO2 = DFRobot_GAS_I2C(wires[i], 0x7B);  // Be sure that your group of i2c address is 7, and A0=1 A1=1
+    success = dfrNO2.begin();
+    if(success) break;
+  }
+  if (!success) return;
+
   // Mode of obtaining data: the main controller needs to request the sensor for data
   dfrNO2.changeAcquireMode(dfrNO2.PASSIVITY);
   // Turn on temperature compensation: gas.ON : turn on
