@@ -2,6 +2,8 @@
 
 #define ARRAY_LEN(arr) (sizeof(arr) / sizeof(arr[0]))
 
+namespace Sensors_Space
+{
 // Units and sensors registers
 
 #define X(unit, symbol, name) symbol,
@@ -24,7 +26,7 @@ int sensors_device_types[] = {SENSORS_TYPES};
 
 uint8_t sensors_registered[SCOUNT];
 
-TwoWire * wires[] = 
+TwoWire * const wires[] = 
 { 
 #if defined(M5STICKCPLUS) || defined(M5COREINK) || defined(ESP32C3)
   &Wire,
@@ -34,10 +36,11 @@ TwoWire * wires[] =
 #endif
 };
 
+}
 /***********************************************************************************
  *  P U B L I C   M E T H O D S
  * *********************************************************************************/
-
+using namespace Sensors_Space;
 /**
  * @brief Main sensors loop.
  * All sensors are read here, please call it on main loop.
