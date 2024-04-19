@@ -60,6 +60,7 @@ void Sensors::printHumTemp() {
  */
 bool Sensors::readAllSensors() {
   readAllComplete = false;
+  dataReady = false;
   if (!i2conly && dev_uart_type >= 0) {
     dataReady = pmSensorRead();
     DEBUG("-->[SLIB] UART data ready \t:", dataReady ? "true" : "false");
